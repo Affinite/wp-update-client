@@ -166,8 +166,9 @@ if ( ! class_exists( 'AffiniteUpdater' ) ) {
 			$data = get_transient( $this->cache_key );
 
 			if ( null !== $this->repository_server && false === $data ) {
+                $license = get_option( sprintf( '%s-license-key', $this->plugin_slug ), '' );
 
-				$response = wp_remote_get( sprintf( '%s?plugin=%s', $this->repository_server, $this->plugin_slug ) );
+				$response = wp_remote_get( sprintf( '%s?plugin=%s&license=%s', $this->repository_server, $this->plugin_slug, $license ) );
 
 				if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) || empty( wp_remote_retrieve_body( $response ) ) ) {
 					return null;
@@ -232,5 +233,38 @@ if ( ! class_exists( 'AffiniteUpdater' ) ) {
 				delete_transient( $this->cache_key );
 			}
 		}
+
+        /**
+         * Activate plugin
+         *
+         * @param string $license_key License key.
+         *
+         * @return bool
+         *
+         * @throws RuntimeException|JsonException Errors.
+         */
+        public function activate_plugin( string $license_key ): bool {
+            if ( null !== $this->repository_server ) {
+                $response = wp_remote_get( sprintf( '%s?plugin=%s&license=%s&activate=1', $this->repository_server, $this->plugin_slug, $license_key ) );
+
+                if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) || empty( wp_remote_retrieve_body( $response ) ) ) {
+                    throw new \RuntimeException( 'Unable to activate plugin.' );
+                }
+
+                $data = json_decode( wp_remote_retrieve_body( $response ), false, 512, JSON_THROW_ON_ERROR );
+
+                if ( empty( $data ) ) {
+                    return false;
+                }
+
+                if ( true === $data->success ) {
+                    update_option( sprintf( '%s-license-key', $this->plugin_slug ), $license_key );
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
 	}
 }
